@@ -1,0 +1,50 @@
+services:
+  traefik:
+    image: traefik:v2.10
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker"
+      - "--entrypoints.web.address=:80"
+      - "--ping=true"
+      - "--ping.entrypoint=web"
+      # Configuración de timeouts
+      - "--serversTransport.forwardingTimeouts.dialTimeout=30s"
+      - "--serversTransport.forwardingTimeouts.responseHeaderTimeout=30s"
+      - "--serversTransport.forwardingTimeouts.idleConnTimeout=90s"
+    ports:
+      - "80:80"
+      - "8080:8080" # Dashboard solo accesible localmente
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - rabbitmq-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`localhost`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.middlewares.dashboard-strip.stripprefix.prefixes=/dashboard"
+      - "traefik.http.routers.dashboard.middlewares=dashboard-strip"
+      - "traefik.http.routers.dashboard.entrypoints=web"
+
+  rabbitmq:
+    image: rabbitmq:4.0-management
+    container_name: rabbitmq
+    ports:
+      - "15672:15672" # Puerto estándar para la interfaz de gestión
+      - "5672:5672" # Puerto estándar para la comunicación
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      - "traefik.enable=false"
+    networks:
+      - rabbitmq-network
+
+networks:
+  rabbitmq-network:
+    driver: bridge

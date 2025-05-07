@@ -4,7 +4,7 @@ import requests
 
 app = Flask(__name__)
 
-@app.route('/recomendarProductos', methods=['POST'])
+@app.route('/recomendar-productos', methods=['POST'])
 def recomendar_productos():
     user_id = str(uuid.uuid4())
     solicitud = f"Solicitud recibida para usuario {user_id}"
@@ -13,8 +13,8 @@ def recomendar_productos():
         'solicitud': solicitud
     })
 
-@app.route('/recomendarProductos', defaults={'path': ''}, methods=['GET'])
-@app.route('/recomendarProductos/<path:path>', methods=['GET'])
+@app.route('/recomendar-productos', defaults={'path': ''}, methods=['GET'])
+@app.route('/recomendar-productos/<path:path>', methods=['GET'])
 def recomendar_productos_front(path):
     # Proxy cualquier ruta al frontend
     try:

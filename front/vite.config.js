@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react-swc'
 
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => ({
-  base: mode === 'production' ? '/recomendarProductos/' : '/',
+  base: mode === 'production' ? '/recomendar-productos/' : '/',
   plugins: [react()],
   server: {
     allowedHosts: ['front']

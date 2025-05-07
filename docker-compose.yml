@@ -45,6 +45,24 @@ services:
     networks:
       - rabbitmq-network
 
+  front:
+    build: ./front
+    ports:
+      - "5173:5173"
+    networks:
+      - rabbitmq-network
+    labels:
+      - "traefik.enable=false"
+
+  back:
+    build: ./back
+    ports:
+      - "5000:5000"
+    networks:
+      - rabbitmq-network
+    labels:
+      - "traefik.enable=false"
+
 networks:
   rabbitmq-network:
     driver: bridge

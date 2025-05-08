@@ -10,8 +10,8 @@ COPY requirements.txt .
 # Instala las dependencias
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia los archivos del backend
-COPY index.py ./
+# Copia todos los archivos del backend
+COPY . .
 
 # Expone el puerto 5000
 EXPOSE 5000

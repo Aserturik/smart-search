@@ -45,6 +45,28 @@ services:
     networks:
       - rabbitmq-network
 
+  postgres:
+    build: ./Postgres
+    container_name: smart-search-db
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - rabbitmq-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    labels:
+      - "traefik.enable=false"
+
   front:
     build: ./front
     ports:
@@ -60,9 +82,15 @@ services:
       - "5000:5000"
     networks:
       - rabbitmq-network
+    depends_on:
+      postgres:
+        condition: service_healthy
     labels:
       - "traefik.enable=false"
 
 networks:
   rabbitmq-network:
     driver: bridge
+
+volumes:
+  postgres-data:

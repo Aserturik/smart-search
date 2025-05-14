@@ -1,3 +1,4 @@
+import json
 from flask import request, jsonify, Response
 import uuid
 import requests
@@ -5,6 +6,7 @@ import psycopg2
 from psycopg2 import pool
 import time
 import logging
+from rabbitmq_utils import enviar_a_rabbitmq
 
 # Crear un pool de conexiones para PostgreSQL
 connection_pool = None
@@ -135,6 +137,32 @@ def register_routes(app):
             
             conn.commit()
             app.logger.info("Transacción completada correctamente")
+
+            # Crear el mensaje para RabbitMQ
+            mensaje = {
+                'id_usuario': user_id,
+                'nombreUsuario': nombre,
+                'edad': edad,
+                'correo': correo,
+                'comentarioSolicitud': comentario_solicitud,
+                'test': {
+                    'motivoCompra': motivo_compra,
+                    'fuenteInformacion': fuente_informacion,
+                    'temasDeInteres': temas_interes,
+                    'comprasNoNecesarias': compras_no_necesarias,
+                    'importanciaMarca': importancia_marca,
+                    'probarNuevosProductos': probar_nuevos_productos,
+                    'aspiraciones': aspiraciones,
+                    'nivelSocial': nivel_social,
+                    'tiempoLibre': tiempo_libre,
+                    'identidad': identidad,
+                    'tendencias': tendencias
+                }
+            }
+
+            # Enviar el mensaje a RabbitMQ
+            enviar_a_rabbitmq(json.dumps(mensaje))
+
             
             return jsonify({
                 'id_usuario': user_id,

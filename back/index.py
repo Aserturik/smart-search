@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, request, jsonify
 import logging  # Importamos logging para configurar el nivel de log
 from flask_cors import CORS
 from routes import register_routes  # Importamos la función que registra las rutas

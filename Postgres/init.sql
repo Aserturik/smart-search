@@ -1,8 +1,7 @@
 CREATE TABLE usuarios (
     id SERIAL PRIMARY KEY,
     nombreUsuario VARCHAR(100) NOT NULL,
-    edad INT NOT NULL,
-    correo VARCHAR(100) NOT NULL UNIQUE
+    edad INT NOT NULL
 );
 
 CREATE TABLE tests (
@@ -30,10 +29,10 @@ CREATE TABLE solicitudes (
 );
 
 -- Insertar datos en la tabla usuarios
-INSERT INTO usuarios (nombreUsuario, edad, correo) VALUES
-('Juan Pérez', 30, 'juan.perez@example.com'),
-('María López', 25, 'maria.lopez@example.com'),
-('Carlos Gómez', 35, 'carlos.gomez@example.com');
+INSERT INTO usuarios (nombreUsuario, edad) VALUES
+('Juan Pérez', 30),
+('María López', 25),
+('Carlos Gómez', 35);
 
 -- Insertar datos en la tabla tests
 INSERT INTO tests (motivoCompra, fuenteInformacion, temasDeInteres, comprasNoNecesarias, importanciaMarca, probarNuevosProductos, aspiraciones, nivelSocial, tiempoLibre, identidad, tendencias) VALUES

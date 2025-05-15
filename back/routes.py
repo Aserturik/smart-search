@@ -76,8 +76,6 @@ def register_routes(app):
             app.logger.error("Error al convertir edad a entero")
             edad = 0
             
-        correo = data.get('correo', 'correo@ejemplo.com')
-        
         # Datos del test
         motivo_compra = data.get('motivoCompra', '')
         fuente_informacion = data.get('fuenteInformacion', '')
@@ -95,7 +93,7 @@ def register_routes(app):
         comentario_solicitud = data.get('comentarioSolicitud', '')
         
         # Usar logger en lugar de print
-        app.logger.info(f"Formulario recibido - Nombre: {nombre}, Edad: {edad}, Correo: {correo}")
+        app.logger.info(f"Formulario recibido - Nombre: {nombre}, Edad: {edad}")
         
         conn = None
         # Guardar en la base de datos
@@ -111,8 +109,8 @@ def register_routes(app):
             
             # Insertar usuario
             cursor.execute(
-                "INSERT INTO usuarios (nombreUsuario, edad, correo) VALUES (%s, %s, %s) RETURNING id",
-                (nombre, edad, correo)
+                "INSERT INTO usuarios (nombreUsuario, edad) VALUES (%s, %s) RETURNING id",
+                (nombre, edad)
             )
             user_id = cursor.fetchone()[0]
             app.logger.info(f"Usuario insertado con ID: {user_id}")
@@ -143,7 +141,6 @@ def register_routes(app):
                 'id_usuario': user_id,
                 'nombreUsuario': nombre,
                 'edad': edad,
-                'correo': correo,
                 'comentarioSolicitud': comentario_solicitud,
                 'test': {
                     'motivoCompra': motivo_compra,

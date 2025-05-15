@@ -5,7 +5,6 @@ function App() {
   const [formData, setFormData] = useState({
     nombreUsuario: '',
     edad: '',
-    correo: '',
     motivoCompra: '',
     fuenteInformacion: '',
     temasDeInteres: '',
@@ -81,18 +80,6 @@ function App() {
             id="edad" 
             name="edad"
             value={formData.edad} 
-            onChange={handleChange}
-            required
-          />
-        </div>
-        
-        <div className="form-group">
-          <label htmlFor="correo">Correo electrónico:</label>
-          <input 
-            type="email" 
-            id="correo" 
-            name="correo"
-            value={formData.correo} 
             onChange={handleChange}
             required
           />

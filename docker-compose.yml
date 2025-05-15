@@ -88,6 +88,22 @@ services:
     labels:
       - "traefik.enable=false"
 
+  ai_service:
+    build: ./ai_service
+    container_name: smart-search-ai-service
+    ports:
+      - "5001:5001" # Puerto para el servicio de IA
+    networks:
+      - rabbitmq-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5001/ || exit 1"] # Ruta de healthcheck simple, ajustar si es necesario
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s # Dar tiempo a que Flask inicie
+    labels:
+      - "traefik.enable=false"
+
 networks:
   rabbitmq-network:
     driver: bridge

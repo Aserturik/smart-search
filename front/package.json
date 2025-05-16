@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@stomp/stompjs": "^7.1.1",
+    "amqplib": "^0.10.8",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

@@ -27,11 +27,14 @@ services:
       - "traefik.http.routers.dashboard.entrypoints=web"
 
   rabbitmq:
-    image: rabbitmq:4.0-management
+    image: rabbitmq:3-management
     container_name: rabbitmq
     ports:
-      - "15672:15672" # Puerto estándar para la interfaz de gestión
-      - "5672:5672" # Puerto estándar para la comunicación
+      - "15672:15672" # Puerto para la interfaz de gestión
+      - "5672:5672"   # Puerto AMQP
+      - "15674:15674" # Puerto para WebSTOMP
+    volumes:
+      - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
@@ -40,8 +43,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    labels:
-      - "traefik.enable=false"
     networks:
       - rabbitmq-network
 
@@ -71,8 +72,20 @@ services:
     build: ./front
     ports:
       - "5173:5173"
+    volumes:
+      - ./front:/app
+      - /app/node_modules
     networks:
       - rabbitmq-network
+    depends_on:
+      - rabbitmq
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - NODE_ENV=development
+      - VITE_DEV_SERVER_HOST=0.0.0.0
+      - VITE_DEV_SERVER_PORT=5173
+      - CHOKIDAR_USEPOLLING=true
     labels:
       - "traefik.enable=false"
 
@@ -83,8 +96,15 @@ services:
     networks:
       - rabbitmq-network
     depends_on:
-      postgres:
-        condition: service_healthy
+      - postgres
+      - rabbitmq
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - PYTHONUNBUFFERED=1
+      - FLASK_ENV=development
+      - FLASK_APP=index.py
+    restart: always
     labels:
       - "traefik.enable=false"
 

@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
+import rabbitmqService from './services/rabbitmq'
 
 function App() {
   const [formData, setFormData] = useState({
@@ -21,6 +22,96 @@ function App() {
   
   const [userId, setUserId] = useState('')
   const [mensaje, setMensaje] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState('Conectando...')
+  const [debugInfo, setDebugInfo] = useState({})
+
+  // Conectar a RabbitMQ al cargar el componente
+  useEffect(() => {
+    console.log('Iniciando conexión con RabbitMQ...');
+    setMensaje('Conectando a RabbitMQ...');
+    
+    // Conectar al servicio de RabbitMQ
+    rabbitmqService.connect()
+      .then(() => {
+        console.log('Conectado a RabbitMQ desde React');
+        setConnectionStatus('Conectado');
+        setMensaje('Listo para enviar formulario');
+        
+        // Recopilar información de depuración
+        setDebugInfo({
+          timestamp: new Date().toISOString(),
+          hostname: window.location.hostname,
+          port: window.location.port,
+          protocol: window.location.protocol,
+          isInDocker: window.location.hostname !== 'localhost',
+          mockMode: !!rabbitmqService.mockMode
+        });
+        
+        // Configurar el listener para respuestas
+        const unsubscribe = rabbitmqService.onResponse((data) => {
+          console.log('Respuesta recibida:', data);
+          setIsLoading(false);
+          
+          if (data.error) {
+            setMensaje('Error: ' + data.error);
+          } else {
+            setUserId(data.id_usuario);
+            setMensaje(data.mensaje || 'Formulario enviado correctamente');
+          }
+        });
+        
+        // Limpiar al desmontar
+        return () => {
+          unsubscribe();
+          rabbitmqService.disconnect();
+        };
+      })
+      .catch(error => {
+        console.error('Error al conectar con RabbitMQ:', error);
+        setConnectionStatus('Error de conexión');
+        setMensaje('Error de conexión a RabbitMQ: ' + error.message);
+      });
+  }, []);
+
+  // Iniciar manejo de respuestas al cargar el componente
+  useEffect(() => {
+    console.log('Configurando manejo de respuestas de RabbitMQ');
+    
+    // Configurar el listener para respuestas de RabbitMQ
+    const unsubscribe = rabbitmqService.onResponse((data) => {
+      console.log('Respuesta recibida del backend:', data);
+      setIsLoading(false);
+      
+      if (data.error) {
+        setMensaje('Error: ' + data.error);
+      } else {
+        setUserId(data.id_usuario || '');
+        setMensaje(data.mensaje || 'Formulario procesado correctamente');
+      }
+      
+      // Actualizar información de depuración
+      setDebugInfo(prevDebug => ({
+        ...prevDebug,
+        lastResponse: data,
+        responseTime: new Date().toISOString()
+      }));
+    });
+    
+    // Establecer información de depuración inicial
+    setDebugInfo({
+      appStartTime: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      windowLocation: window.location.href
+    });
+    
+    // Limpiar al desmontar el componente
+    return () => {
+      console.log('Limpiando manejadores de respuestas');
+      unsubscribe();
+    };
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -32,25 +123,34 @@ function App() {
 
   const enviarFormulario = async (e) => {
     e.preventDefault()
+    setIsLoading(true);
+    setMensaje('Enviando formulario...');
     
     try {
-      const response = await fetch('http://localhost:5000/recomendar-productos', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData)
-      })
+      console.log('Enviando formulario a través de RabbitMQ:', formData);
       
-      const data = await response.json()
-      if (data.error) {
-        setMensaje('Error: ' + data.error)
-      } else {
-        setUserId(data.id_usuario)
-        setMensaje(data.mensaje || 'Formulario enviado correctamente')
-      }
+      // Actualizar información de depuración
+      setDebugInfo(prevDebug => ({
+        ...prevDebug,
+        lastRequest: formData,
+        requestTime: new Date().toISOString()
+      }));
+      
+      // Enviar los datos a través de RabbitMQ
+      await rabbitmqService.sendMessage(formData);
+      console.log('Formulario enviado, esperando respuesta...');
+      
     } catch (error) {
-      setMensaje('Error al enviar el formulario: ' + error.message)
+      console.error('Error al enviar formulario:', error);
+      setIsLoading(false);
+      setMensaje(`Error al enviar el formulario: ${error.message || 'Error desconocido'}`);
+      
+      // Actualizar información de depuración
+      setDebugInfo(prevDebug => ({
+        ...prevDebug,
+        lastError: error.message,
+        errorTime: new Date().toISOString()
+      }));
     }
   }
 
@@ -58,6 +158,10 @@ function App() {
     <div className="container">
       <h1>Bienvenido a Smart Search</h1>
       <p>Cuestionario de personalidad para recomendaciones de productos</p>
+      
+      <div className="connection-status">
+        Estado: {connectionStatus}
+      </div>
       
       <form onSubmit={enviarFormulario} className="form-container">
         <h2>Información Personal</h2>
@@ -299,7 +403,9 @@ function App() {
           />
         </div>
         
-        <button type="submit" className="submit-button">Enviar Formulario</button>
+        <button type="submit" className="submit-button" disabled={isLoading}>
+          {isLoading ? 'Enviando...' : 'Enviar Formulario'}
+        </button>
       </form>
       
       {userId && (
@@ -310,6 +416,16 @@ function App() {
       )}
       
       {mensaje && <p className="message">{mensaje}</p>}
+      
+      {/* Área de información de depuración */}
+      <div className="debug-info" style={{ marginTop: '2rem', padding: '1rem', background: '#f5f5f5', borderRadius: '4px' }}>
+        <details>
+          <summary>Información de depuración</summary>
+          <pre style={{ whiteSpace: 'pre-wrap', overflowX: 'auto' }}>
+            {JSON.stringify(debugInfo, null, 2)}
+          </pre>
+        </details>
+      </div>
     </div>
   )
 }

@@ -1,15 +1,14 @@
 # Stage 1: Build the frontend
-FROM node:24-alpine AS build
+FROM node:24-alpine
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
+RUN npm install amqplib
 COPY . .
-RUN npm run build
 
-# Stage 2: Serve static files
-FROM node:24-alpine
-WORKDIR /app
-RUN npm install -g serve
-COPY --from=build /app/dist ./dist
+# Exponer puerto y configurar para acceso desde exterior
 EXPOSE 5173
-CMD ["serve", "-s", "dist", "-l", "5173"]
+ENV HOST=0.0.0.0
+
+# Usar vite directamente para desarrollo
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

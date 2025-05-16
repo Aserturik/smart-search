@@ -13,6 +13,7 @@ RABBITMQ_PASS = os.environ.get('RABBITMQ_PASS', 'guest')
 # Nombre de las colas
 QUEUE_SOLICITUDES = 'solicitudes'
 QUEUE_RESPUESTAS = 'respuestas'
+QUEUE_PETICIONES_IA = 'peticiones_ia'
 
 # Configuración de intercambio de mensajes
 EXCHANGE_NAME = 'formularios'
@@ -109,10 +110,13 @@ def setup_rabbitmq():
         # Configurar colas
         canal.queue_declare(queue=QUEUE_SOLICITUDES, durable=True)
         canal.queue_declare(queue=QUEUE_RESPUESTAS, durable=True)
+        canal.queue_declare(queue=QUEUE_PETICIONES_IA, durable=True)
         
         # Vincular colas a exchange
         canal.queue_bind(exchange=EXCHANGE_NAME, queue=QUEUE_SOLICITUDES, routing_key=QUEUE_SOLICITUDES)
         canal.queue_bind(exchange=EXCHANGE_NAME, queue=QUEUE_RESPUESTAS, routing_key=QUEUE_RESPUESTAS)
+        # No es necesario vincular QUEUE_PETICIONES_IA al exchange 'formularios' si se va a usar de forma directa
+        # o con otro exchange específico. Por ahora, la dejaremos sin vincular a este exchange.
         
         conexion.close()
         logging.info("RabbitMQ configurado correctamente")
@@ -127,3 +131,30 @@ def configurar_consumidor(canal, cola, callback):
     canal.basic_qos(prefetch_count=1)
     canal.basic_consume(queue=cola, on_message_callback=callback)
     logging.info(f"Consumidor configurado para la cola: {cola}")
+
+# Función para enviar mensajes a la cola de peticiones de IA
+def enviar_a_peticiones_ia(mensaje):
+    """Envía un mensaje a la cola de peticiones de IA."""
+    try:
+        conexion = pika.BlockingConnection(get_connection_params())
+        canal = conexion.channel()
+
+        # Declarar la cola (asegura que exista)
+        canal.queue_declare(queue=QUEUE_PETICIONES_IA, durable=True)
+
+        # Publicar el mensaje directamente a la cola
+        canal.basic_publish(
+            exchange='', # Publicación directa a la cola
+            routing_key=QUEUE_PETICIONES_IA,
+            body=mensaje if isinstance(mensaje, str) else json.dumps(mensaje),
+            properties=pika.BasicProperties(
+                delivery_mode=2,  # Hacer que el mensaje sea persistente
+                content_type='application/json'
+            )
+        )
+        logging.info(f"Mensaje enviado a RabbitMQ ({QUEUE_PETICIONES_IA}): {mensaje}")
+        conexion.close()
+        return True
+    except Exception as e:
+        logging.error(f"Error al enviar mensaje a {QUEUE_PETICIONES_IA}: {e}")
+        return False

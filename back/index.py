@@ -3,7 +3,7 @@ import logging
 import time
 import signal
 import sys
-from rabbitmq_utils import conectar_a_rabbitmq, configurar_consumidor, enviar_a_rabbitmq
+from rabbitmq_utils import conectar_a_rabbitmq, configurar_consumidor, enviar_a_rabbitmq, enviar_a_peticiones_ia
 from rabbitmq_utils import QUEUE_SOLICITUDES, QUEUE_RESPUESTAS, setup_rabbitmq
 from database_utils import init_db_connection_pool, get_db_connection, release_db_connection
 
@@ -62,6 +62,31 @@ def procesar_solicitud(ch, method, properties, body):
         comentario_solicitud = data.get('comentarioSolicitud', '')
         
         logger.info(f"Formulario recibido - Nombre: {nombre}, Edad: {edad}")
+        
+        # Preparar datos del perfil de usuario para el servicio de IA
+        perfil_usuario_ia = {
+            'nombreUsuario': nombre,
+            'edad': edad,
+            'motivoCompra': motivo_compra,
+            'fuenteInformacion': fuente_informacion,
+            'temasDeInteres': temas_interes,
+            'comprasNoNecesarias': compras_no_necesarias,
+            'importanciaMarca': importancia_marca,
+            'probarNuevosProductos': probar_nuevos_productos,
+            'aspiraciones': aspiraciones,
+            'nivelSocial': nivel_social,
+            'tiempoLibre': tiempo_libre,
+            'identidad': identidad,
+            'tendencias': tendencias,
+            # 'comentarioSolicitud': comentario_solicitud # Decidir si este campo es relevante para la IA
+        }
+
+        # Enviar perfil de usuario a la cola de peticiones de IA
+        # Esto se hace independientemente de si la inserción en BD es exitosa o no,
+        # ya que la sugerencia de IA podría ser útil incluso si hay un problema temporal con la BD.
+        logger.info(f"Enviando perfil de usuario al servicio de IA: {perfil_usuario_ia}")
+        if not enviar_a_peticiones_ia(perfil_usuario_ia):
+            logger.error("No se pudo enviar el perfil de usuario al servicio de IA.")
         
         conn = None
         # Guardar en la base de datos

@@ -1,2 +1,23 @@
+# Framework web y utilidades
+Flask
+flask-cors
+python-dotenv
+
+# Base de datos
 psycopg2-binary
+
+# RabbitMQ
 pika
+
+# Cliente HTTP y manejo de JSON
+requests
+
+# Web Scraping
+beautifulsoup4
+
+# Utilidades
+python-json-logger
+
+# Testing
+pytest
+pytest-cov

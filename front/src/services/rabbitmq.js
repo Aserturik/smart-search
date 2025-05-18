@@ -10,6 +10,7 @@ const RABBITMQ_WS_URL = `ws://${RABBITMQ_HOST}:${RABBITMQ_PORT}/ws`;
 // Configuración de colas
 const QUEUE_SOLICITUDES = 'solicitudes';
 const QUEUE_RESPUESTAS = 'respuestas';
+const QUEUE_SCRAPED_URLS = 'scraped_urls_queue'; // Nueva cola para URLs scrapeadas
 
 // Para depuración
 console.log(`Entorno Docker: ${isInDocker}`);
@@ -189,6 +190,19 @@ class RabbitMQService {
           console.error('Error al procesar respuesta:', e);
         }
       });
+
+      // Suscribirse a la cola de URLs scrapeadas
+      const scrapedUrlsDestination = `/queue/${QUEUE_SCRAPED_URLS}`;
+      console.log(`Suscribiéndose a cola de URLs scrapeadas: ${scrapedUrlsDestination}`);
+      this.client.subscribe(scrapedUrlsDestination, (message) => {
+        try {
+          const data = JSON.parse(message.body);
+          console.log('URLs scrapeadas recibidas de RabbitMQ:', data);
+          this._processScrapedUrls(data); // Nuevo método para procesar estas URLs
+        } catch (e) {
+          console.error('Error al procesar URLs scrapeadas:', e);
+        }
+      });
       
       console.log('Suscripción a cola de respuestas completada');
     } catch (error) {
@@ -320,6 +334,37 @@ class RabbitMQService {
     
     return () => {
       const callbacks = this.messageCallbacks.get('respuesta') || [];
+      const index = callbacks.indexOf(callback);
+      if (index !== -1) {
+        callbacks.splice(index, 1);
+      }
+    };
+  }
+
+  // Nuevo método para procesar URLs scrapeadas
+  _processScrapedUrls(data) {
+    console.log('Procesando URLs scrapeadas:', data);
+    const callbacks = this.messageCallbacks.get('scraped_urls') || [];
+    
+    callbacks.forEach(callback => {
+      try {
+        callback(data);
+      } catch (e) {
+        console.error('Error en callback de URLs scrapeadas:', e);
+      }
+    });
+  }
+
+  // Nuevo método para suscribirse a eventos de URLs scrapeadas
+  onScrapedUrls(callback) {
+    if (!this.messageCallbacks.has('scraped_urls')) {
+      this.messageCallbacks.set('scraped_urls', []);
+    }
+    
+    this.messageCallbacks.get('scraped_urls').push(callback);
+    
+    return () => {
+      const callbacks = this.messageCallbacks.get('scraped_urls') || [];
       const index = callbacks.indexOf(callback);
       if (index !== -1) {
         callbacks.splice(index, 1);

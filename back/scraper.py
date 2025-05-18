@@ -5,6 +5,7 @@ import logging
 import pika
 import json
 import time
+from rabbitmq_utils import enviar_a_scraped_urls, QUEUE_SCRAPED_URLS
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -164,6 +165,17 @@ def procesar_peticion_scraping_callback(ch, method, properties, body):
         # Podrías enviar `scraped_data` a otra cola o base de datos aquí si es necesario.
         # Por ahora, solo confirmamos el procesamiento.
         logging.info(f"Scraper: Scraping completado para {user_id_log}. URLs obtenidas: {len(scraped_data.get('urls', []))}")
+
+        # Enviar las URLs scrapeadas a la nueva cola para el frontend
+        if scraped_data.get('urls'):
+            payload_urls = {
+                'user_id': user_id_log, # Aunque el frontend no lo use actualmente para esto, es buena práctica incluirlo
+                'urls': scraped_data['urls']
+            }
+            if enviar_a_scraped_urls(payload_urls):
+                logging.info(f"Scraper: URLs enviadas a {QUEUE_SCRAPED_URLS} para usuario {user_id_log}")
+            else:
+                logging.error(f"Scraper: Error al enviar URLs a {QUEUE_SCRAPED_URLS} para usuario {user_id_log}")
 
         ch.basic_ack(delivery_tag=method.delivery_tag)
         logging.info(f"Scraper: Petición de scraping procesada y ack enviada para usuario: {user_id_log}")

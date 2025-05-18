@@ -144,3 +144,57 @@ body {
   background-color: #23272a;
   color: #ecf0f1;
 }
+
+/* Estilos para la sección de URLs scrapeadas */
+.scraped-urls-container {
+  margin-top: 30px;
+  padding: 20px;
+  background-color: #34495e; /* Similar al form-container */
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  text-align: left;
+}
+
+.scraped-urls-container h2 {
+  color: #3498db; /* Coincide con otros h2 */
+  margin-top: 0; /* Ajuste para el primer elemento en el contenedor */
+  border-bottom: 1px solid #7f8c8d;
+  padding-bottom: 10px;
+}
+
+.scraped-urls-container ul {
+  list-style-type: none;
+  padding-left: 0;
+}
+
+.scraped-urls-container li {
+  margin-bottom: 10px;
+  padding: 8px;
+  background-color: #2c3e50; /* Similar a los inputs */
+  border-radius: 4px;
+  word-break: break-all; /* Para que las URLs largas no rompan el layout */
+}
+
+.scraped-urls-container a {
+  color: #3498db; /* Color de enlace principal */
+  text-decoration: none;
+}
+
+.scraped-urls-container a:hover {
+  text-decoration: underline;
+  color: #5dade2;
+}
+
+/* Estilos para el contenedor de las tarjetas Microlink */
+.microlink-cards-wrapper {
+  display: flex;
+  flex-direction: column; /* Apila las tarjetas verticalmente */
+  align-items: center; /* Centra las tarjetas si no ocupan todo el ancho */
+  gap: 20px; /* Espacio entre tarjetas, alternativa al marginBottom en el componente */
+}
+
+/* Ajustes opcionales para las tarjetas Microlink si es necesario */
+/* Por ejemplo, para asegurar que no sean demasiado anchas en contenedores estrechos */
+.microlink-cards-wrapper > div { /* Asumiendo que Microlink renderiza un div como su elemento raíz */
+  max-width: 100%;
+}

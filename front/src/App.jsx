@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 import rabbitmqService from './services/rabbitmq'
+import Microlink from '@microlink/react'
+import styled from 'styled-components'
 
 function App() {
   const [formData, setFormData] = useState({
@@ -25,6 +27,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState('Conectando...')
   const [debugInfo, setDebugInfo] = useState({})
+  const [scrapedUrls, setScrapedUrls] = useState([]);
 
   // Conectar a RabbitMQ al cargar el componente
   useEffect(() => {
@@ -112,6 +115,30 @@ function App() {
       unsubscribe();
     };
   }, []);
+
+  // Efecto para manejar URLs scrapeadas
+  useEffect(() => {
+    console.log('Configurando listener para URLs scrapeadas');
+    const unsubscribeUrls = rabbitmqService.onScrapedUrls((data) => {
+      console.log('URLs scrapeadas recibidas en App.jsx:', data);
+      if (data && data.urls && Array.isArray(data.urls)) {
+        // Aquí podrías verificar data.user_id si fuera necesario para filtrar
+        // Por ahora, simplemente añadimos las URLs recibidas
+        // Para evitar duplicados si el componente se re-renderiza o el mensaje llega varias veces:
+        setScrapedUrls(prevUrls => {
+          const newUrls = data.urls.filter(url => !prevUrls.includes(url));
+          return [...prevUrls, ...newUrls];
+        });
+      } else {
+        console.warn('Formato de URLs scrapeadas inesperado:', data);
+      }
+    });
+
+    return () => {
+      console.log('Limpiando listener de URLs scrapeadas');
+      unsubscribeUrls();
+    };
+  }, []); // Dependencias vacías para que se ejecute solo al montar/desmontar
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -426,6 +453,18 @@ function App() {
           </pre>
         </details>
       </div>
+
+      {/* Sección para mostrar URLs scrapeadas */}
+      {scrapedUrls.length > 0 && (
+        <div className="scraped-urls-container">
+          <h2>Enlaces de Productos Encontrados:</h2>
+          <div className="microlink-cards-wrapper">
+            {scrapedUrls.map((url, index) => (
+              <Microlink key={index} url={url} size="large" media={['image', 'logo']} style={{ marginBottom: '20px' }} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

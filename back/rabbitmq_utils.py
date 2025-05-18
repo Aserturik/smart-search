@@ -14,6 +14,7 @@ RABBITMQ_PASS = os.environ.get('RABBITMQ_PASS', 'guest')
 QUEUE_SOLICITUDES = 'solicitudes'
 QUEUE_RESPUESTAS = 'respuestas'
 QUEUE_PETICIONES_IA = 'peticiones_ia'
+QUEUE_SCRAPED_URLS = 'scraped_urls_queue'
 
 # Configuración de intercambio de mensajes
 EXCHANGE_NAME = 'formularios'
@@ -111,6 +112,7 @@ def setup_rabbitmq():
         canal.queue_declare(queue=QUEUE_SOLICITUDES, durable=True)
         canal.queue_declare(queue=QUEUE_RESPUESTAS, durable=True)
         canal.queue_declare(queue=QUEUE_PETICIONES_IA, durable=True)
+        canal.queue_declare(queue=QUEUE_SCRAPED_URLS, durable=True)
         
         # Vincular colas a exchange
         canal.queue_bind(exchange=EXCHANGE_NAME, queue=QUEUE_SOLICITUDES, routing_key=QUEUE_SOLICITUDES)
@@ -157,4 +159,33 @@ def enviar_a_peticiones_ia(mensaje):
         return True
     except Exception as e:
         logging.error(f"Error al enviar mensaje a {QUEUE_PETICIONES_IA}: {e}")
+        return False
+
+# Función para enviar mensajes a la cola de URLs scrapeadas
+def enviar_a_scraped_urls(mensaje):
+    """Envía un mensaje a la cola de URLs scrapeadas."""
+    try:
+        conexion = pika.BlockingConnection(get_connection_params())
+        canal = conexion.channel()
+
+        # Declarar la cola (asegura que exista)
+        # La declaración ya se hace en setup_rabbitmq, pero es bueno tenerla aquí por si acaso
+        # y para mantener consistencia con otras funciones de envío.
+        canal.queue_declare(queue=QUEUE_SCRAPED_URLS, durable=True)
+
+        # Publicar el mensaje directamente a la cola
+        canal.basic_publish(
+            exchange='', # Publicación directa a la cola
+            routing_key=QUEUE_SCRAPED_URLS,
+            body=mensaje if isinstance(mensaje, str) else json.dumps(mensaje),
+            properties=pika.BasicProperties(
+                delivery_mode=2,  # Hacer que el mensaje sea persistente
+                content_type='application/json'
+            )
+        )
+        logging.info(f"Mensaje enviado a RabbitMQ ({QUEUE_SCRAPED_URLS}): {mensaje}")
+        conexion.close()
+        return True
+    except Exception as e:
+        logging.error(f"Error al enviar mensaje a {QUEUE_SCRAPED_URLS}: {e}")
         return False

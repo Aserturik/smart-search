@@ -2,6 +2,7 @@
 Flask
 flask-cors
 python-dotenv
+gunicorn
 
 # Base de datos
 psycopg2-binary

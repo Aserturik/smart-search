@@ -17,6 +17,7 @@ RABBITMQ_PORT = int(os.environ.get('RABBITMQ_PORT', 5672))
 RABBITMQ_USER = os.environ.get('RABBITMQ_USER', 'guest')
 RABBITMQ_PASS = os.environ.get('RABBITMQ_PASS', 'guest')
 QUEUE_PETICIONES_IA = 'peticiones_ia'
+SCRAPPER_PETICIONES_QUEUE = os.environ.get('SCRAPPER_PETICIONES_QUEUE', 'scrapper_peticiones_queue') # Nueva cola
 
 def get_connection_params():
     """Obtiene los parámetros de conexión a RabbitMQ"""
@@ -72,6 +73,30 @@ def procesar_peticion_ia_callback(ch, method, properties, body):
         except ValueError as e: # Captura el ValueError de la verificación de isinstance
             logging.error(f"Error en formato de contenido de IA para {user_id_log}: {ia_message_content_str}. Error: {e}. Mensaje no será reencolado.")
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+            return
+
+        # Preparar mensaje para el scraper
+        mensaje_para_scraper = {
+            "user_id": user_id_log, # Incluir user_id para trazabilidad
+            "busquedas": lista_busquedas
+        }
+        
+        try:
+            # Publicar en la cola del scraper
+            # Asegurarse de que la cola existe (declararla aquí también es una buena práctica, aunque el consumidor también lo hará)
+            ch.queue_declare(queue=SCRAPPER_PETICIONES_QUEUE, durable=True)
+            ch.basic_publish(
+                exchange='',
+                routing_key=SCRAPPER_PETICIONES_QUEUE,
+                body=json.dumps(mensaje_para_scraper),
+                properties=pika.BasicProperties(
+                    delivery_mode=2,  # Hacer el mensaje persistente
+                ))
+            logging.info(f"Mensaje con búsquedas para {user_id_log} enviado a {SCRAPPER_PETICIONES_QUEUE}: {mensaje_para_scraper}")
+        except Exception as pub_err:
+            logging.error(f"Error al publicar mensaje en {SCRAPPER_PETICIONES_QUEUE} para {user_id_log}: {pub_err}. El mensaje original de IA será reencolado para no perder la petición.")
+            # Reencolar el mensaje original de IA si falla la publicación al scraper
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
             return
 
         # Aquí se procesaría `lista_busquedas` y se enviaría a otra cola si fuera necesario.

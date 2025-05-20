@@ -91,19 +91,17 @@ services:
 
   back:
     build: ./back
-    ports:
-      - "5000:5000"
     networks:
       - rabbitmq-network
     depends_on:
-      - postgres
-      - rabbitmq
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     environment:
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_PORT=5672
       - PYTHONUNBUFFERED=1
-      - FLASK_ENV=development
-      - FLASK_APP=index.py
     restart: always
     labels:
       - "traefik.enable=false"

@@ -22,8 +22,5 @@ COPY . .
 # Copia la configuración de supervisor
 COPY supervisor.conf /etc/supervisor/conf.d/supervisor.conf
 
-# Expone el puerto 5000 (ya que gunicorn ahora escucha en este puerto)
-EXPOSE 5000
-
 # Comando para ejecutar supervisord
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisor.conf"]

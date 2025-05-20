@@ -18,7 +18,3 @@ beautifulsoup4
 
 # Utilidades
 python-json-logger
-
-# Testing
-pytest
-pytest-cov

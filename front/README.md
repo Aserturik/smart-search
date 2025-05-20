@@ -1,12 +1,41 @@
-# React + Vite
+# Frontend Service - Smart Search
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Interfaz de usuario para el sistema de recomendación de productos.
 
-Currently, two official plugins are available:
+## Estructura
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+front/
+├── src/
+│   ├── App.jsx           # Componente principal
+│   ├── services/
+│   │   └── rabbitmq.js   # Cliente RabbitMQ WebSTOMP
+│   ├── main.jsx         # Punto de entrada
+│   └── styles/          # Estilos CSS
+├── package.json        # Dependencias y scripts
+├── vite.config.js     # Configuración de Vite
+└── Dockerfile         # Configuración de contenedor
 
-## Expanding the ESLint configuration
+## Características
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- Formulario de perfil de usuario
+- Conexión WebSocket con RabbitMQ
+- Visualización de productos recomendados
+- Interfaz responsiva
+- Tarjetas de producto con Microlink
+
+## Tecnologías usadas
+
+- React 19
+- Vite
+- WebSTOMP (RabbitMQ)
+- Styled Components
+- Microlink React
+
+## Configuración
+
+El servicio se configura a través de variables de entorno:
+- `RABBITMQ_HOST`: Host para WebSocket
+- `RABBITMQ_PORT`: Puerto WebSocket (15674)
+- `NODE_ENV`: Entorno de desarrollo
+- `VITE_DEV_SERVER_HOST`: Host del servidor de desarrollo
+- `VITE_DEV_SERVER_PORT`: Puerto del servidor (5173)

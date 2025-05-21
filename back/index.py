@@ -78,7 +78,7 @@ def procesar_solicitud(ch, method, properties, body):
             'tiempoLibre': tiempo_libre,
             'identidad': identidad,
             'tendencias': tendencias,
-            # 'comentarioSolicitud': comentario_solicitud # Decidir si este campo es relevante para la IA
+            'comentarioSolicitud': comentario_solicitud
         }
 
         # Enviar perfil de usuario a la cola de peticiones de IA

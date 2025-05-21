@@ -2,6 +2,7 @@ import os
 import requests
 import json
 import logging
+import re  # Importamos re para usar expresiones regulares
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -11,7 +12,7 @@ OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 YOUR_SITE_URL = os.getenv("YOUR_SITE_URL", "http://localhost:5173")
 YOUR_SITE_NAME = os.getenv("YOUR_SITE_NAME", "Smart Search")
 
-DEFAULT_MODEL = "qwen/qwen3-235b-a22b"
+DEFAULT_MODEL = "deepseek/deepseek-r1-zero:free"
 
 def get_openrouter_headers():
     if not OPENROUTER_API_KEY:
@@ -47,6 +48,46 @@ def call_openrouter_api_for_prompt(prompt: str):
         if not ia_message_content_str:
             logging.warning("No se encontró contenido en la respuesta de la IA o formato inesperado.")
             return None
+            
+        # Limpiar la respuesta para extraer solo el contenido JSON
+        logging.info(f"Contenido original recibido de IA: {ia_message_content_str}")
+        
+        # Buscar patrones de array JSON dentro de posibles formatos como \boxed{[...]} o ```json[...]```
+        json_array_pattern = r'\[(.*?)\]'
+        boxed_pattern = r'\\boxed\{(.*?)\}'
+        code_block_pattern = r'```(?:json)?\s*(\[.*?\])\s*```'
+        
+        # Intentar primero con \boxed{...}
+        boxed_match = re.search(boxed_pattern, ia_message_content_str, re.DOTALL)
+        if boxed_match:
+            json_content = boxed_match.group(1)
+            logging.info(f"Contenido extraído del patrón boxed: {json_content}")
+            # Verificar si lo que hay dentro es un array JSON
+            if json_content.strip().startswith('[') and json_content.strip().endswith(']'):
+                return json_content
+        
+        # Intentar con bloques de código
+        code_match = re.search(code_block_pattern, ia_message_content_str, re.DOTALL)
+        if code_match:
+            json_content = code_match.group(1)
+            logging.info(f"Contenido extraído del bloque de código: {json_content}")
+            return json_content
+        
+        # Si no se encontró en patrones específicos, buscar cualquier array JSON en el texto
+        json_match = re.search(json_array_pattern, ia_message_content_str, re.DOTALL)
+        if json_match:
+            json_array_text = f"[{json_match.group(1)}]"
+            logging.info(f"Contenido extraído como array JSON: {json_array_text}")
+            
+            # Verificar que sea un JSON válido intentando parsearlo
+            try:
+                json.loads(json_array_text)
+                return json_array_text
+            except json.JSONDecodeError as e:
+                logging.warning(f"El contenido extraído no es un JSON válido: {json_array_text}. Error: {e}")
+        
+        # Si no encontramos un patrón reconocible o JSON válido, devolver el contenido original
+        logging.warning("No se pudo extraer un array JSON válido, devolviendo contenido original")
         return ia_message_content_str
 
     except requests.exceptions.HTTPError as http_err:
@@ -103,4 +144,4 @@ def proxy_openrouter_request(incoming_data: dict):
         return {"error": str(val_err)}, 500
     except Exception as e:
         logging.error(f"Ocurrió un error inesperado en proxy: {e}", exc_info=True)
-        return {"error": f"Ocurrió un error inesperado: {str(e)}"}, 500 
+        return {"error": f"Ocurrió un error inesperado: {str(e)}"}, 500

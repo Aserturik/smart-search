@@ -40,6 +40,8 @@ def health_check():
 def proxy_openrouter_endpoint():
     try:
         incoming_data = request.json
+        logging.info(f"Datos recibidos del formulario: {incoming_data}")
+        
         if not incoming_data:
             return jsonify({"error": "Request body debe ser JSON"}), 400
 

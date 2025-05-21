@@ -93,7 +93,9 @@ services:
       - PYTHONUNBUFFERED=1
     restart: always
     labels:
-      - "traefik.enable=false"
+      - "traefik.enable=true"
+      - "traefik.http.routers.back.rule=Host(`localhost`) && PathPrefix(`/formulary`)"
+      - "traefik.http.services.back.loadbalancer.server.port=5000"
 
   ai_service:
     build: ./ai_service

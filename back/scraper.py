@@ -5,10 +5,20 @@ import logging
 import pika
 import json
 import time
+import sys
 from rabbitmq_utils import enviar_a_scraped_urls, QUEUE_SCRAPED_URLS
+from database_utils import get_db_connection, init_db_connection_pool
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Configure logging con más detalles
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+logger = logging.getLogger(__name__)
 
 # RabbitMQ Configuration (similar to ai_service)
 RABBITMQ_HOST = os.environ.get('RABBITMQ_HOST', 'rabbitmq')
@@ -33,15 +43,15 @@ def conectar_a_rabbitmq(max_intentos=5, tiempo_espera=5):
     while intentos < max_intentos:
         try:
             conexion = pika.BlockingConnection(get_rabbitmq_connection_params())
-            logging.info("Scraper: Conexión establecida con RabbitMQ")
+            logger.info("Scraper: Conexión establecida con RabbitMQ")
             return conexion
         except Exception as e:
             intentos += 1
-            logging.error(f"Scraper: Intento {intentos}/{max_intentos} fallido al conectar con RabbitMQ: {e}")
+            logger.error(f"Scraper: Intento {intentos}/{max_intentos} fallido al conectar con RabbitMQ: {e}")
             if intentos < max_intentos:
-                logging.info(f"Scraper: Reintentando en {tiempo_espera} segundos...")
+                logger.info(f"Scraper: Reintentando en {tiempo_espera} segundos...")
                 time.sleep(tiempo_espera)
-    logging.error("Scraper: No se pudo establecer conexión con RabbitMQ después de varios intentos")
+    logger.error("Scraper: No se pudo establecer conexión con RabbitMQ después de varios intentos")
     return None
 
 def construir_url(response):
@@ -60,13 +70,13 @@ def scrape_mercadolibre_colombia(search_queries_obj, max_products_per_search=5):
     all_product_links = {"urls": []}
     
     if "busquedas" not in search_queries_obj or not isinstance(search_queries_obj["busquedas"], list):
-        logging.error("Invalid input format. Expected {'busquedas': ['query1', 'query2', ...]}")
+        logger.error("Invalid input format. Expected {'busquedas': ['query1', 'query2', ...]}")
         return all_product_links
 
     for busqueda_texto in search_queries_obj["busquedas"]:
-        logging.info(f"Starting scrape for: {busqueda_texto}")
+        logger.info(f"Starting scrape for: {busqueda_texto}")
         url = construir_url(busqueda_texto)
-        logging.info(f"Generated URL: {url}")
+        logger.info(f"Generated URL: {url}")
         
         product_links_for_current_search = []
         current_page = 1
@@ -83,10 +93,10 @@ def scrape_mercadolibre_colombia(search_queries_obj, max_products_per_search=5):
                     response.raise_for_status() # Raises an HTTPError for bad responses (4XX or 5XX)
                     break 
                 except requests.exceptions.RequestException as e:
-                    logging.warning(f"Error accessing page {page_url} (Attempt {attempt + 1}/{retries}): {e}")
+                    logger.warning(f"Error accessing page {page_url} (Attempt {attempt + 1}/{retries}): {e}")
                     attempt += 1
                     if attempt == retries:
-                        logging.error(f"Failed to access page {page_url} after {retries} attempts.")
+                        logger.error(f"Failed to access page {page_url} after {retries} attempts.")
                         # Optionally, you might want to break the outer loop or skip this search query
                         break # Break from retry loop, go to next search or stop
 
@@ -109,7 +119,7 @@ def scrape_mercadolibre_colombia(search_queries_obj, max_products_per_search=5):
                     break
             
             if len(product_links_for_current_search) >= max_products_per_search:
-                logging.info(f"Reached max products ({max_products_per_search}) for '{busqueda_texto}'.")
+                logger.info(f"Reached max products ({max_products_per_search}) for '{busqueda_texto}'.")
                 break
 
             # Check for next page
@@ -121,11 +131,11 @@ def scrape_mercadolibre_colombia(search_queries_obj, max_products_per_search=5):
                 next_page_indicators = [a for a in soup.find_all("a") if a.get_text(strip=True) == "Siguiente"]
 
             if not next_page_indicators or not next_page_indicators[0].get("href"):
-                logging.info(f"No 'Next' page found for '{busqueda_texto}' on page {current_page}. Reached end of results for this search or page structure changed.")
+                logger.info(f"No 'Next' page found for '{busqueda_texto}' on page {current_page}. Reached end of results for this search or page structure changed.")
                 break # No next page link found
 
             if not found_new_link_on_page and current_page > 1: # Avoid breaking on first page if it's empty for some reason
-                 logging.info(f"No new links found on page {current_page} for '{busqueda_texto}'. Assuming end of relevant results.")
+                 logger.info(f"No new links found on page {current_page} for '{busqueda_texto}'. Assuming end of relevant results.")
                  break
             
             current_page += 1
@@ -133,10 +143,10 @@ def scrape_mercadolibre_colombia(search_queries_obj, max_products_per_search=5):
             # import time
             # time.sleep(1) 
 
-        logging.info(f"Found {len(product_links_for_current_search)} links for '{busqueda_texto}'.")
+        logger.info(f"Found {len(product_links_for_current_search)} links for '{busqueda_texto}'.")
 
-    logging.info(f"Scraping finished. Total unique URLs collected: {len(all_product_links['urls'])}")
-    logging.info(f"Collected URLs: {all_product_links}")
+    logger.info(f"Scraping finished. Total unique URLs collected: {len(all_product_links['urls'])}")
+    logger.info(f"Collected URLs: {all_product_links}")
     return all_product_links
 
 def procesar_peticion_scraping_callback(ch, method, properties, body):
@@ -145,10 +155,10 @@ def procesar_peticion_scraping_callback(ch, method, properties, body):
     try:
         mensaje = json.loads(body.decode())
         user_id_log = mensaje.get('user_id', 'ID no especificado')
-        logging.info(f"Scraper: Recibida petición de scraping para usuario: {user_id_log} con datos: {mensaje}")
+        logger.info(f"Scraper: Recibida petición de scraping para usuario: {user_id_log} con datos: {mensaje}")
 
         if 'busquedas' not in mensaje or not isinstance(mensaje['busquedas'], list):
-            logging.error(f"Scraper: Formato de mensaje inválido para {user_id_log}. Esperado {{'busquedas': [...]}}. Mensaje: {mensaje}")
+            logger.error(f"Scraper: Formato de mensaje inválido para {user_id_log}. Esperado {{'busquedas': [...]}}. Mensaje: {mensaje}")
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False) # No reencolar, mensaje erróneo
             return
 
@@ -156,7 +166,7 @@ def procesar_peticion_scraping_callback(ch, method, properties, body):
         search_queries_obj = {"busquedas": mensaje['busquedas']}
         max_products = mensaje.get('max_products_per_search', MAX_PRODUCTS_PER_SEARCH_DEFAULT)
 
-        logging.info(f"Scraper: Iniciando scraping para {user_id_log} con {len(search_queries_obj['busquedas'])} búsquedas, max_products: {max_products}.")
+        logger.info(f"Scraper: Iniciando scraping para {user_id_log} con {len(search_queries_obj['busquedas'])} búsquedas, max_products: {max_products}.")
         
         # Aquí se llama a la función de scraping existente
         # La función scrape_mercadolibre_colombia ya loguea sus resultados.
@@ -164,7 +174,7 @@ def procesar_peticion_scraping_callback(ch, method, properties, body):
 
         # Podrías enviar `scraped_data` a otra cola o base de datos aquí si es necesario.
         # Por ahora, solo confirmamos el procesamiento.
-        logging.info(f"Scraper: Scraping completado para {user_id_log}. URLs obtenidas: {len(scraped_data.get('urls', []))}")
+        logger.info(f"Scraper: Scraping completado para {user_id_log}. URLs obtenidas: {len(scraped_data.get('urls', []))}")
 
         # Enviar las URLs scrapeadas a la nueva cola para el frontend
         if scraped_data.get('urls'):
@@ -173,24 +183,74 @@ def procesar_peticion_scraping_callback(ch, method, properties, body):
                 'urls': scraped_data['urls']
             }
             if enviar_a_scraped_urls(payload_urls):
-                logging.info(f"Scraper: URLs enviadas a {QUEUE_SCRAPED_URLS} para usuario {user_id_log}")
+                logger.info(f"Scraper: URLs enviadas a {QUEUE_SCRAPED_URLS} para usuario {user_id_log}")
             else:
-                logging.error(f"Scraper: Error al enviar URLs a {QUEUE_SCRAPED_URLS} para usuario {user_id_log}")
+                logger.error(f"Scraper: Error al enviar URLs a {QUEUE_SCRAPED_URLS} para usuario {user_id_log}")
+
+            # Guardar URLs en la base de datos
+            try:
+                conn = get_db_connection()
+                if conn:
+                    cursor = conn.cursor()
+                    
+                    # Convertir user_id_log a entero
+                    user_id = int(user_id_log)
+                    
+                    # Obtener el ID de la solicitud más reciente
+                    cursor.execute("""
+                        SELECT id 
+                        FROM solicitudes 
+                        WHERE userId = %s 
+                        ORDER BY id DESC 
+                        LIMIT 1
+                    """, (user_id,))
+                    
+                    solicitud_id = cursor.fetchone()
+                    
+                    if solicitud_id:
+                        logger.info(f"Encontrada solicitud {solicitud_id[0]} para usuario {user_id}")
+                        
+                        # Primero eliminar URLs existentes para esta solicitud
+                        cursor.execute("""
+                            DELETE FROM urls_encontradas 
+                            WHERE solicitud_id = %s
+                        """, (solicitud_id[0],))
+                        
+                        # Insertar las nuevas URLs
+                        for url in scraped_data['urls']:
+                            cursor.execute("""
+                                INSERT INTO urls_encontradas (solicitud_id, url)
+                                VALUES (%s, %s)
+                            """, (solicitud_id[0], url))
+                        
+                        conn.commit()
+                        logger.info(f"Se guardaron {len(scraped_data['urls'])} URLs para la solicitud {solicitud_id[0]}")
+                    else:
+                        logger.error(f"No se encontró solicitud para el usuario {user_id}")
+            except ValueError as e:
+                logger.error(f"Error al convertir user_id: {user_id_log} - {e}")
+            except Exception as e:
+                logger.error(f"Error al guardar URLs: {e}")
+                if conn:
+                    conn.rollback()
+            finally:
+                if conn:
+                    conn.close()
 
         ch.basic_ack(delivery_tag=method.delivery_tag)
-        logging.info(f"Scraper: Petición de scraping procesada y ack enviada para usuario: {user_id_log}")
+        logger.info(f"Scraper: Petición de scraping procesada y ack enviada para usuario: {user_id_log}")
 
     except json.JSONDecodeError as e:
-        logging.error(f"Scraper: Error al decodificar JSON de RabbitMQ para {user_id_log}: {body.decode()}. Error: {e}. Mensaje no será reencolado.")
+        logger.error(f"Scraper: Error al decodificar JSON de RabbitMQ para {user_id_log}: {body.decode()}. Error: {e}. Mensaje no será reencolado.")
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
     except Exception as e:
-        logging.error(f"Scraper: Error inesperado al procesar petición de scraping para {user_id_log}: {e}", exc_info=True)
+        logger.error(f"Scraper: Error inesperado al procesar petición de scraping para {user_id_log}: {e}", exc_info=True)
         # Reencolar con precaución, podría ser un error persistente en el mensaje o en el scraper
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True) 
 
 def iniciar_consumidor_scraper():
     """Inicia el consumidor de RabbitMQ para la cola de peticiones de scraping."""
-    logging.info(f"Scraper: Preparando para iniciar consumidor de {SCRAPPER_PETICIONES_QUEUE}...")
+    logger.info(f"Scraper: Preparando para iniciar consumidor de {SCRAPPER_PETICIONES_QUEUE}...")
     while True:
         conexion = conectar_a_rabbitmq()
         if conexion:
@@ -202,35 +262,40 @@ def iniciar_consumidor_scraper():
                 
                 canal.basic_consume(queue=SCRAPPER_PETICIONES_QUEUE, on_message_callback=procesar_peticion_scraping_callback)
                 
-                logging.info(f"Scraper: Consumidor de {SCRAPPER_PETICIONES_QUEUE} iniciado. Esperando mensajes...")
+                logger.info(f"Scraper: Consumidor de {SCRAPPER_PETICIONES_QUEUE} iniciado. Esperando mensajes...")
                 canal.start_consuming()
             except pika.exceptions.StreamLostError as e:
-                logging.warning(f"Scraper: Se perdió la conexión con RabbitMQ (StreamLostError): {e}. Reintentando...")
+                logger.warning(f"Scraper: Se perdió la conexión con RabbitMQ (StreamLostError): {e}. Reintentando...")
             except pika.exceptions.AMQPConnectionError as e:
-                logging.warning(f"Scraper: Error de conexión AMQP: {e}. Reintentando...")
+                logger.warning(f"Scraper: Error de conexión AMQP: {e}. Reintentando...")
             except Exception as e:
-                logging.error(f"Scraper: Error inesperado en el consumidor: {e}. Reintentando...", exc_info=True)
+                logger.error(f"Scraper: Error inesperado en el consumidor: {e}. Reintentando...", exc_info=True)
             finally:
                 if conexion and not conexion.is_closed:
                     try:
                         conexion.close()
-                        logging.info("Scraper: Conexión RabbitMQ cerrada limpiamente.")
+                        logger.info("Scraper: Conexión RabbitMQ cerrada limpiamente.")
                     except Exception as close_err:
-                        logging.error(f"Scraper: Error al cerrar la conexión RabbitMQ: {close_err}")
-                logging.info("Scraper: Intentando reconectar consumidor RabbitMQ en 10 segundos.")
+                        logger.error(f"Scraper: Error al cerrar la conexión RabbitMQ: {close_err}")
+                logger.info("Scraper: Intentando reconectar consumidor RabbitMQ en 10 segundos.")
                 time.sleep(10)
         else:
-            logging.warning("Scraper: No se pudo conectar a RabbitMQ para iniciar consumidor. Reintentando en 10 segundos.")
+            logger.warning("Scraper: No se pudo conectar a RabbitMQ para iniciar consumidor. Reintentando en 10 segundos.")
             time.sleep(10)
 
-# Example of how to use the module (optional, for testing)
-# if __name__ == "__main__":
-#     sample_searches = {"busquedas": ["amd ryzen 5", "nvidia rtx 3060"]}
-#     results = scrape_mercadolibre_colombia(sample_searches, max_products_per_search=3)
-#     # The results are already logged by the function itself.
-#     # You can do further processing with 'results' here if needed.
+def main():
+    """Función principal que inicia el servicio"""
+    try:
+        # Inicializar la conexión a la base de datos
+        if not init_db_connection_pool():
+            logger.error("No se pudo inicializar el pool de conexiones a la base de datos")
+            sys.exit(1)
+            
+        logger.info("Iniciando servicio de Scraper...")
+        iniciar_consumidor_scraper()
+    except Exception as e:
+        logger.error(f"Error crítico al iniciar el servicio: {e}", exc_info=True)
+        sys.exit(1)
 
 if __name__ == "__main__":
-    logging.info("Iniciando servicio de Scraper...")
-    # Aquí puedes añadir cualquier inicialización específica del scraper si es necesario
-    iniciar_consumidor_scraper() # Inicia el consumidor de RabbitMQ
+    main()

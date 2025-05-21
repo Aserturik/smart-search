@@ -30,95 +30,34 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
 def procesar_solicitud(ch, method, properties, body):
-    """Procesa los mensajes de solicitud recibidos de RabbitMQ"""
     try:
-        # Decodificar el mensaje JSON
         data = json.loads(body)
-        logger.info(f"Datos recibidos del formulario via RabbitMQ: {data}")
+        logger.info(f"Datos recibidos del formulario: {data}")
         
-        nombre = data.get('nombreUsuario', 'Usuario Anónimo')
-        
-        # Intentar convertir la edad a entero
-        try:
-            edad = int(data.get('edad', 0))
-        except (TypeError, ValueError):
-            logger.error("Error al convertir edad a entero")
-            edad = 0
+        conn = get_db_connection()
+        if not conn:
+            logger.error("No se pudo conectar a la base de datos")
+            return
             
-        # Datos del test
-        motivo_compra = data.get('motivoCompra', '')
-        fuente_informacion = data.get('fuenteInformacion', '')
-        temas_interes = data.get('temasDeInteres', '')
-        compras_no_necesarias = data.get('comprasNoNecesarias', '')
-        importancia_marca = data.get('importanciaMarca', '')
-        probar_nuevos_productos = data.get('probarNuevosProductos', '')
-        aspiraciones = data.get('aspiraciones', '')
-        nivel_social = data.get('nivelSocial', '')
-        tiempo_libre = data.get('tiempoLibre', '')
-        identidad = data.get('identidad', '')
-        tendencias = data.get('tendencias', '')
+        cursor = conn.cursor()
         
-        # Comentario de la solicitud
-        comentario_solicitud = data.get('comentarioSolicitud', '')
-        
-        logger.info(f"Formulario recibido - Nombre: {nombre}, Edad: {edad}")
-        
-        # Preparar datos del perfil de usuario para el servicio de IA
-        perfil_usuario_ia = {
-            'nombreUsuario': nombre,
-            'edad': edad,
-            'motivoCompra': motivo_compra,
-            'fuenteInformacion': fuente_informacion,
-            'temasDeInteres': temas_interes,
-            'comprasNoNecesarias': compras_no_necesarias,
-            'importanciaMarca': importancia_marca,
-            'probarNuevosProductos': probar_nuevos_productos,
-            'aspiraciones': aspiraciones,
-            'nivelSocial': nivel_social,
-            'tiempoLibre': tiempo_libre,
-            'identidad': identidad,
-            'tendencias': tendencias,
-            'comentarioSolicitud': comentario_solicitud
-        }
-
-        # Enviar perfil de usuario a la cola de peticiones de IA
-        # Esto se hace independientemente de si la inserción en BD es exitosa o no,
-        # ya que la sugerencia de IA podría ser útil incluso si hay un problema temporal con la BD.
-        logger.info(f"Enviando perfil de usuario al servicio de IA: {perfil_usuario_ia}")
-        if not enviar_a_peticiones_ia(perfil_usuario_ia):
-            logger.error("No se pudo enviar el perfil de usuario al servicio de IA.")
-        
-        conn = None
-        # Guardar en la base de datos
         try:
-            conn = get_db_connection()
-            if conn is None:
-                logger.error("No se pudo conectar a la base de datos")
-                # Enviar respuesta de error
-                enviar_a_rabbitmq(
-                    json.dumps({'error': 'No se pudo conectar a la base de datos'}),
-                    queue=QUEUE_RESPUESTAS
-                )
-                return
-                
-            cursor = conn.cursor()
-            
-            # Insertar usuario
+            # Insertar usuario y obtener su ID
             cursor.execute(
                 "INSERT INTO usuarios (nombreUsuario, edad) VALUES (%s, %s) RETURNING id",
-                (nombre, edad)
+                (data['nombreUsuario'], data['edad'])
             )
             user_id = cursor.fetchone()[0]
             logger.info(f"Usuario insertado con ID: {user_id}")
             
-            # Insertar test
+            # Insertar test y obtener su ID
             cursor.execute(
                 """INSERT INTO tests (motivoCompra, fuenteInformacion, temasDeInteres, comprasNoNecesarias, 
                 importanciaMarca, probarNuevosProductos, aspiraciones, nivelSocial, tiempoLibre, 
                 identidad, tendencias) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-                (motivo_compra, fuente_informacion, temas_interes, compras_no_necesarias,
-                importancia_marca, probar_nuevos_productos, aspiraciones, nivel_social,
-                tiempo_libre, identidad, tendencias)
+                (data['motivoCompra'], data['fuenteInformacion'], data['temasDeInteres'], data['comprasNoNecesarias'],
+                data['importanciaMarca'], data['probarNuevosProductos'], data['aspiraciones'], data['nivelSocial'],
+                data['tiempoLibre'], data['identidad'], data['tendencias'])
             )
             test_id = cursor.fetchone()[0]
             logger.info(f"Test insertado con ID: {test_id}")
@@ -126,48 +65,57 @@ def procesar_solicitud(ch, method, properties, body):
             # Insertar solicitud
             cursor.execute(
                 "INSERT INTO solicitudes (userId, testsId, comentarioSolicitud) VALUES (%s, %s, %s)",
-                (user_id, test_id, comentario_solicitud)
+                (user_id, test_id, data['comentarioSolicitud'])
             )
             
+            # Al enviar el perfil al servicio de IA, incluir el ID de usuario
+            perfil_usuario_ia = {
+                'id_usuario': user_id,  # Agregar el ID de usuario aquí
+                'usuario': {
+                    'id': user_id,
+                    'nombreUsuario': data['nombreUsuario'],
+                    'edad': data['edad']
+                },
+                'formulario': {
+                    'motivoCompra': data['motivoCompra'],
+                    'fuenteInformacion': data['fuenteInformacion'],
+                    'temasDeInteres': data['temasDeInteres'],
+                    'comprasNoNecesarias': data['comprasNoNecesarias'],
+                    'importanciaMarca': data['importanciaMarca'],
+                    'probarNuevosProductos': data['probarNuevosProductos'],
+                    'aspiraciones': data['aspiraciones'],
+                    'nivelSocial': data['nivelSocial'],
+                    'tiempoLibre': data['tiempoLibre'],
+                    'identidad': data['identidad'],
+                    'tendencias': data['tendencias']
+                }
+            }
+
+            logger.info(f"Enviando perfil de usuario {user_id} al servicio de IA")
+            if not enviar_a_peticiones_ia(perfil_usuario_ia):
+                logger.error(f"No se pudo enviar el perfil del usuario {user_id} al servicio de IA")
+
             conn.commit()
-            logger.info("Transacción completada correctamente")
             
             # Enviar mensaje de respuesta a la cola de respuestas
             respuesta = {
                 'id_usuario': user_id,
-                'nombre': nombre,
-                'mensaje': f"Hola {nombre}, tu información ha sido registrada correctamente."
+                'nombre': data['nombreUsuario'],
+                'mensaje': f"Hola {data['nombreUsuario']}, tu información ha sido registrada correctamente."
             }
             enviar_a_rabbitmq(json.dumps(respuesta), queue=QUEUE_RESPUESTAS)
             
         except Exception as e:
-            logger.error(f"Error al guardar en la base de datos: {e}")
-            if conn:
-                try:
-                    conn.rollback()
-                    logger.info("Transacción revertida")
-                except Exception as rollback_error:
-                    logger.error(f"Error al revertir transacción: {rollback_error}")
-            
-            # Enviar mensaje de error a la cola de respuestas
-            respuesta_error = {
-                'error': f"Error al guardar en la base de datos: {str(e)}"
-            }
-            enviar_a_rabbitmq(json.dumps(respuesta_error), queue=QUEUE_RESPUESTAS)
+            logger.error(f"Error procesando solicitud: {e}")
+            conn.rollback()
+            raise
         finally:
-            if conn:
-                release_db_connection(conn)
-                logger.info("Conexión devuelta al pool")
-            
-            # Confirmar el procesamiento del mensaje
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-    except json.JSONDecodeError as e:
-        logger.error(f"Error al decodificar JSON: {e}")
-        # Confirmar el mensaje para que no se reintente indefinidamente
-        ch.basic_ack(delivery_tag=method.delivery_tag)
+            cursor.close()
+            conn.close()
+
     except Exception as e:
-        logger.error(f"Error inesperado procesando el mensaje: {e}")
-        # Confirmar el mensaje para que no se reintente indefinidamente
+        logger.error(f"Error en procesar_solicitud: {e}")
+        # Asegurarse de que el mensaje sea procesado
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
 def main():

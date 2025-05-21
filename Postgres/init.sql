@@ -28,6 +28,15 @@ CREATE TABLE solicitudes (
     CONSTRAINT fk_test FOREIGN KEY (testsId) REFERENCES tests (id) ON DELETE CASCADE
 );
 
+-- Crear tabla para almacenar las URLs encontradas
+CREATE TABLE urls_encontradas (
+    id SERIAL PRIMARY KEY,
+    solicitud_id INT NOT NULL,
+    url VARCHAR(500) NOT NULL,
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (solicitud_id) REFERENCES solicitudes(id) ON DELETE CASCADE
+);
+
 -- Insertar datos en la tabla usuarios
 INSERT INTO usuarios (nombreUsuario, edad) VALUES
 ('Juan Pérez', 30),

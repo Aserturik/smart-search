@@ -57,13 +57,17 @@ def conectar_a_rabbitmq(max_intentos=5, tiempo_espera=5):
 
 
 def procesar_peticion_ia_callback(ch, method, properties, body):
-    """Procesa un mensaje de la cola de peticiones_ia."""
     try:
         data_usuario = json.loads(body.decode())
-        user_id_log = data_usuario.get(
-            "user_id", "ID no especificado"
-        )  # Para logging conciso
-        logging.info(f"Recibida petición de IA para usuario: {user_id_log}")
+        # Extraer el ID de usuario del mensaje
+        user_id = data_usuario.get('id_usuario') or data_usuario.get('usuario', {}).get('id')
+        
+        if not user_id:
+            logging.error("No se encontró ID de usuario en el mensaje")
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+            return
+            
+        logging.info(f"Recibida petición de IA para usuario: {user_id}")
 
         prompt = f"""Analiza el siguiente perfil de usuario y genera entre 10 y 12 términos de búsqueda altamente relevantes y específicos para una tienda online. Enfócate especialmente en palabras clave concretas relacionadas con marcas, productos o intereses explícitos del usuario. Utiliza el lenguaje exacto que un usuario escribiría en un buscador, priorizando términos cortos y accionables como 'cámara nikon', 'sony alpha', 'cámara para paisajes', etc.
 
@@ -77,7 +81,7 @@ Responde únicamente con un array JSON de strings. Ejemplo de formato exacto de 
 
         if not ia_message_content_str:
             logging.warning(
-                f"No se recibió contenido de la IA para usuario: {user_id_log}. Reintentando mensaje."
+                f"No se recibió contenido de la IA para usuario: {user_id}. Reintentando mensaje."
             )
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
             return
@@ -87,11 +91,11 @@ Responde únicamente con un array JSON de strings. Ejemplo de formato exacto de 
             if not isinstance(lista_busquedas, list):
                 raise ValueError("El contenido de la IA no es una lista JSON.")
             logging.info(
-                f"Lista de búsquedas obtenida para {user_id_log}: {lista_busquedas}"
+                f"Lista de búsquedas obtenida para {user_id}: {lista_busquedas}"
             )
         except json.JSONDecodeError as e:
             logging.error(
-                f"Error al decodificar JSON de IA para {user_id_log}: {ia_message_content_str}. Error: {e}. Mensaje no será reencolado."
+                f"Error al decodificar JSON de IA para {user_id}: {ia_message_content_str}. Error: {e}. Mensaje no será reencolado."
             )
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             return
@@ -99,15 +103,15 @@ Responde únicamente con un array JSON de strings. Ejemplo de formato exacto de 
             ValueError
         ) as e:  # Captura el ValueError de la verificación de isinstance
             logging.error(
-                f"Error en formato de contenido de IA para {user_id_log}: {ia_message_content_str}. Error: {e}. Mensaje no será reencolado."
+                f"Error en formato de contenido de IA para {user_id}: {ia_message_content_str}. Error: {e}. Mensaje no será reencolado."
             )
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             return
 
         # Preparar mensaje para el scraper
         mensaje_para_scraper = {
-            "user_id": user_id_log,  # Incluir user_id para trazabilidad
-            "busquedas": lista_busquedas,
+            'user_id': user_id,  # Usar el ID extraído
+            'busquedas': lista_busquedas
         }
 
         try:
@@ -123,22 +127,19 @@ Responde únicamente con un array JSON de strings. Ejemplo de formato exacto de 
                 ),
             )
             logging.info(
-                f"Mensaje con búsquedas para {user_id_log} enviado a {SCRAPPER_PETICIONES_QUEUE}: {mensaje_para_scraper}"
+                f"Mensaje con búsquedas para usuario {user_id} enviado a {SCRAPPER_PETICIONES_QUEUE}: {mensaje_para_scraper}"
             )
         except Exception as pub_err:
             logging.error(
-                f"Error al publicar mensaje en {SCRAPPER_PETICIONES_QUEUE} para {user_id_log}: {pub_err}. El mensaje original de IA será reencolado para no perder la petición."
+                f"Error al publicar mensaje en {SCRAPPER_PETICIONES_QUEUE} para {user_id}: {pub_err}. El mensaje original de IA será reencolado para no perder la petición."
             )
             # Reencolar el mensaje original de IA si falla la publicación al scraper
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
             return
 
-        # Aquí se procesaría `lista_busquedas` y se enviaría a otra cola si fuera necesario.
-        # Actualmente, solo se registra el resultado.
-
         ch.basic_ack(delivery_tag=method.delivery_tag)
         logging.info(
-            f"Petición de IA procesada y ack enviada para usuario: {user_id_log}"
+            f"Petición de IA procesada y ack enviada para usuario: {user_id}"
         )
 
     except (
@@ -147,11 +148,11 @@ Responde únicamente con un array JSON de strings. Ejemplo de formato exacto de 
         # Distinguir si el error es por API key o por otra cosa podría ser útil aquí
         if "OPENROUTER_API_KEY" in str(val_err):
             logging.critical(
-                f"Error crítico de configuración con OpenRouter (procesando usuario {user_id_log}): {val_err}. El mensaje no será reencolado. Revisar configuración."
+                f"Error crítico de configuración con OpenRouter (procesando usuario {user_id}): {val_err}. El mensaje no será reencolado. Revisar configuración."
             )
         else:
             logging.error(
-                f"ValueError durante el procesamiento para {user_id_log}: {val_err}. Mensaje no será reencolado."
+                f"ValueError durante el procesamiento para {user_id}: {val_err}. Mensaje no será reencolado."
             )
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
     except (
@@ -160,7 +161,7 @@ Responde únicamente con un array JSON de strings. Ejemplo de formato exacto de 
     ) as req_err:
         # Errores de comunicación con OpenRouter (ya logueados en openrouter_client)
         logging.warning(
-            f"Error de comunicación con OpenRouter (procesando usuario {user_id_log}): {req_err}. Mensaje será reencolado."
+            f"Error de comunicación con OpenRouter (procesando usuario {user_id}): {req_err}. Mensaje será reencolado."
         )
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
     except (
@@ -172,7 +173,7 @@ Responde únicamente con un array JSON de strings. Ejemplo de formato exacto de 
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
     except Exception as e:
         logging.error(
-            f"Error inesperado al procesar petición de IA para {user_id_log}: {e}",
+            f"Error inesperado al procesar petición de IA para {user_id}: {e}",
             exc_info=True,
         )
         ch.basic_nack(

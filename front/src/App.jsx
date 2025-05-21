@@ -4,6 +4,46 @@ import rabbitmqService from './services/rabbitmq'
 import Microlink from '@microlink/react'
 import styled from 'styled-components'
 
+// Componente para el círculo de carga
+const LoadingSpinner = styled.div`
+  display: inline-block;
+  width: 80px;
+  height: 80px;
+  margin: 20px auto;
+  border: 6px solid rgba(0, 0, 0, 0.1);
+  border-left-color: #3498db;
+  border-radius: 50%;
+  animation: rotate 1s linear infinite;
+  
+  @keyframes rotate {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+`;
+
+// Contenedor para el spinner centrado
+const LoadingContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 30px auto;
+  padding: 30px;
+  background-color: #34495e;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  max-width: 400px;
+  
+  p {
+    margin-top: 15px;
+    color: #ecf0f1;
+    font-size: 16px;
+    font-weight: 500;
+  }
+`;
+
 function App() {
   const [formData, setFormData] = useState({
     nombreUsuario: '',
@@ -24,7 +64,7 @@ function App() {
   
   const [userId, setUserId] = useState('')
   const [mensaje, setMensaje] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false) // Estado para controlar la carga
   const [connectionStatus, setConnectionStatus] = useState('Conectando...')
   const [debugInfo, setDebugInfo] = useState({})
   const [scrapedUrls, setScrapedUrls] = useState([]);
@@ -122,12 +162,18 @@ function App() {
     const unsubscribeUrls = rabbitmqService.onScrapedUrls((data) => {
       console.log('URLs scrapeadas recibidas en App.jsx:', data);
       if (data && data.urls && Array.isArray(data.urls)) {
-        // Aquí podrías verificar data.user_id si fuera necesario para filtrar
-        // Por ahora, simplemente añadimos las URLs recibidas
-        // Para evitar duplicados si el componente se re-renderiza o el mensaje llega varias veces:
         setScrapedUrls(prevUrls => {
           const newUrls = data.urls.filter(url => !prevUrls.includes(url));
-          return [...prevUrls, ...newUrls];
+          const combinedUrls = [...prevUrls, ...newUrls];
+          
+          // Si recibimos URLs, podemos desactivar el estado de carga
+          // Solo si hay al menos una URL (para evitar falsos positivos)
+          if (newUrls.length > 0) {
+            console.log('URLs recibidas, desactivando estado de carga');
+            setIsLoading(false);
+          }
+          
+          return combinedUrls;
         });
       } else {
         console.warn('Formato de URLs scrapeadas inesperado:', data);
@@ -149,9 +195,15 @@ function App() {
   }
 
   const enviarFormulario = async (e) => {
-    e.preventDefault()
+    e.preventDefault();
+    
+    // Primero establecemos el estado de carga a true y limpiamos las URLs
     setIsLoading(true);
+    setScrapedUrls([]);
     setMensaje('Enviando formulario...');
+    
+    // Registramos el estado actual para verificar
+    console.log('Estado isLoading al iniciar envío:', true);
     
     try {
       console.log('Enviando formulario a través de RabbitMQ:', formData);
@@ -160,16 +212,20 @@ function App() {
       setDebugInfo(prevDebug => ({
         ...prevDebug,
         lastRequest: formData,
-        requestTime: new Date().toISOString()
+        requestTime: new Date().toISOString(),
+        isLoadingOnRequest: true // Registrar que isLoading es true durante la solicitud
       }));
       
       // Enviar los datos a través de RabbitMQ
       await rabbitmqService.sendMessage(formData);
       console.log('Formulario enviado, esperando respuesta...');
+      console.log('Estado isLoading después de enviar:', isLoading);
       
+      // Importante: NO cambiamos isLoading a false aquí
+      // setIsLoading se ejecutará cuando llegue la respuesta (en el efecto onResponse)
     } catch (error) {
       console.error('Error al enviar formulario:', error);
-      setIsLoading(false);
+      setIsLoading(false); // En caso de error, desactivamos el estado de carga
       setMensaje(`Error al enviar el formulario: ${error.message || 'Error desconocido'}`);
       
       // Actualizar información de depuración
@@ -444,16 +500,35 @@ function App() {
       
       {mensaje && <p className="message">{mensaje}</p>}
       
-      {/* Área de información de depuración */}
-      <div className="debug-info" style={{ marginTop: '2rem', padding: '1rem', background: '#f5f5f5', borderRadius: '4px' }}>
-        <details>
-          <summary>Información de depuración</summary>
-          <pre style={{ whiteSpace: 'pre-wrap', overflowX: 'auto' }}>
-            {JSON.stringify(debugInfo, null, 2)}
-          </pre>
-        </details>
+      {/* Componente de círculo de carga */}
+      {isLoading && scrapedUrls.length === 0 && (
+        <LoadingContainer>
+          <LoadingSpinner />
+          <p>Buscando productos recomendados para ti...</p>
+        </LoadingContainer>
+      )}
+      
+      {/* Componente de depuración - Solo visible durante desarrollo */}
+      <div style={{margin: '20px 0', padding: '10px', border: '1px solid #ccc', borderRadius: '5px', backgroundColor: '#f9f9f9'}}>
+        <h3>Estado de depuración:</h3>
+        <p>isLoading: {isLoading ? 'true' : 'false'}</p>
+        <p>scrapedUrls.length: {scrapedUrls.length}</p>
+        <p>¿Debería mostrar spinner? {(isLoading && scrapedUrls.length === 0) ? 'SÍ' : 'NO'}</p>
+        <button 
+          onClick={() => {
+            console.log('Forzando isLoading a true');
+            setIsLoading(true);
+            console.log('isLoading después de set:', isLoading);
+          }}
+          style={{marginRight: '10px'}}
+        >
+          Forzar isLoading=true
+        </button>
+        <button onClick={() => setScrapedUrls([])}>
+          Limpiar URLs
+        </button>
       </div>
-
+    
       {/* Sección para mostrar URLs scrapeadas */}
       {scrapedUrls.length > 0 && (
         <div className="scraped-urls-container">
